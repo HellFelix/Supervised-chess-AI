@@ -48,16 +48,22 @@ def random_move():
 print("Gamemode: ")
 mode = input()
 
-if mode == "random":
+def play_random():
     while not board.is_checkmate():
         ai_move(board)
         print(board)
         random_move()
         print(board)
-elif mode == "challenge":
+
+def play_challenge():
     while not board.is_checkmate():
         ai_move(board)
         print(board)
         move_input = input()
         board.push(chess.Move.from_uci(move_input))
         print(board)
+
+if mode == "random":
+    play_random()
+elif mode == "challenge":
+    play_challenge()

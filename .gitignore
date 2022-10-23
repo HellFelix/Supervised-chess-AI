@@ -1,0 +1,6 @@
+.DS_Store
+positions.npy
+dataset.txt
+evaluations.npy
+__pycache__
+venv

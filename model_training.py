@@ -36,7 +36,7 @@ utils.plot_model(model, to_file='model_plot.png', show_shapes=True, show_layer_n
 model.compile(optimizer=optimizers.Adam(5e-4), loss='mean_squared_error')
 model.summary()
 
-model.fit(training_positions, training_evaluations, epochs=100, validation_data=(test_positions, test_evaluations))
+model.fit(training_positions, training_evaluations, epochs=10, validation_data=(test_positions, test_evaluations))
 
 
 model.save('Chess_AI.model', overwrite=True)
