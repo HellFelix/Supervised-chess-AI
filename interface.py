@@ -1,3 +1,4 @@
+from tracemalloc import start
 import numpy as np
 import pygame
 import os
@@ -240,6 +241,13 @@ def possible_moves_king(square):
             if not 8 in s and not -1 in s:
                 # remove squares outside the bounds of the board
                 possible_moves.append(s)
+    
+    # add the squares for castling if it is possible
+    if can_castle(square, "left"):
+        possible_moves.append((square[0], square[1]-2))
+    if can_castle(square, "right"):
+        possible_moves.append((square[0], square[1]+2))
+
     return possible_moves
 
 # handle the machanics for promotion
@@ -282,6 +290,36 @@ def promotion(square):
         else:
             raise Exception("invalid promotion square")
 
+def can_castle(square, side):
+    # create a list of all the attacked squares
+    attacked = []
+    for s in position:
+        if position[s] != 0 and position[s].colour != position[square].colour:
+            if not "king" in position[s].image: # to avoid recursion, this case is dropped, there also does not exist a case in which this would be problematic
+                attacked += can_go(s)
+
+    # left side
+    if side == "left":
+        if position[(square[0], square[1]-1)] == 0 and position[(square[0], square[1]-2)] == 0 and position[(square[0], square[1]-3)] == 0:
+            # if the squares left of the king are empty
+            if position[square].has_moved == False and position[(square[0], square[1]-4)].has_moved == False:
+                # if neither the rook nor the king have moved
+                if not square in attacked and not (square[0], square[1]-1) in attacked and not (square[0], square[1]-2) in attacked:
+                    # if none of the squares that the king will pass through are attacked by the opponents pieces
+                    return True
+
+    # right side
+    elif side == "right":
+        if position[(square[0], square[1]+1)] == 0 and position[(square[0], square[1]+2)] == 0:
+            # if the squares right of the king are empty
+            if position[square].has_moved == False and position[(square[0], square[1]+3)].has_moved == False:
+                # if neither the rook nor the king have moved
+                if not square in attacked and not (square[0], square[1]+1) in attacked and not (square[0], square[1]+2) in attacked:
+                    # if none of the squares that the king will pass through are attacked by the opponents pieces
+                    return True
+
+    # default return False
+    return False
 
 def can_go(square):
     self = position[square] 
@@ -335,6 +373,28 @@ def move(start_square, finish_square):
                     if position[start_square].colour == "black" and position[(finish_square[0]-1, finish_square[1])].can_en_passent:
                         del position[(finish_square[0]-1, finish_square[1])]
                         position[(finish_square[0]-1, finish_square[1])] = 0
+
+        # if castling is in play, the rook should be moved as well
+        if "king" in position[start_square].image:
+            if abs(start_square[1] - finish_square[1]) == 2:
+                # if the king has moved two steps horizontally, it must be the case that castling is in play
+                if start_square[1] > finish_square[1]: # the king has moved left
+
+                    # change the representation on the board (rect_piecce) 
+                    rect_piece[position[(start_square[0], start_square[1]-4)]].x, rect_piece[position[(start_square[0], start_square[1]-4)]].y = squares[(start_square[0], start_square[1]-1)].x_cor, squares[(start_square[0], start_square[1]-1)].y_cor
+                    
+                    # change internal representation
+                    position[(start_square[0], start_square[1]-1)] = position[(start_square[0], start_square[1]-4)]
+                    position[(start_square[0], start_square[1]-4)] = 0
+
+                elif start_square[1] < finish_square[1]: # the king has moved right
+
+                    # change the representation on the board (rect_piecce) 
+                    rect_piece[position[(start_square[0], start_square[1]+3)]].x, rect_piece[position[(start_square[0], start_square[1]+3)]].y = squares[(start_square[0], start_square[1]+1)].x_cor, squares[(start_square[0], start_square[1]+1)].y_cor
+                    
+                    # change internal representation
+                    position[(start_square[0], start_square[1]+1)] = position[(start_square[0], start_square[1]+3)]
+                    position[(start_square[0], start_square[1]+3)] = 0
 
         # save the previous position just in case the move turns out to be invalid
         prev_position = position
@@ -517,28 +577,36 @@ def main():
             if event.type == pygame.QUIT:  
                 running = False
             if event.type == pygame.MOUSEBUTTONDOWN:
+                # clear the board of the squares that a piece can move to 
+                for s in squares:
+                    squares[s].colour = org_colour[s]
+
+                # keep track on if a piece has moved this turn
+                moved = False
+
                 for square in position:
                     if squares[square].x_cor < event.pos[0] and squares[square].x_cor + 100 > event.pos[0] and squares[square].y_cor < event.pos[1] and squares[square].y_cor + 100 > event.pos[1]:
                         if not selected is None and square in can_go(selected):
                             # above basically means that for every square, if player pressed the square and the pice can go to the square then...
                             rect_piece[position[selected]].x, rect_piece[position[selected]].y = squares[square].x_cor, squares[square].y_cor
-                            draw(squares, position)
                             move(selected, square)
+                            draw(squares, position)
                             print(board)
 
+                            # reset selected piece
+                            selected = None
+
+                            # change moved to True because a piece has moved on this click
+                            moved = True
                             break
 
-                # return all squares to their original colour
-                for s in squares:
-                    squares[s].colour = org_colour[s]
-                # reset selected piece
-                selected = None
-                # show all squares that the piece can go to
-                for square in position:
-                    if position[square] != 0:
-                        if rect_piece[position[square]].collidepoint(event.pos):
-                            highlight(square)
-                            selected = square
+                if not moved: # of course, if we move a piece, we don't want to show the squares it can move to
+                    # show all squares that the piece can go to
+                    for square in position:
+                        if position[square] != 0:
+                            if rect_piece[position[square]].collidepoint(event.pos):
+                                highlight(square)
+                                selected = square
 
         draw(squares, position)
 
