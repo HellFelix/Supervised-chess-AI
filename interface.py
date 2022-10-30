@@ -1,4 +1,3 @@
-from tracemalloc import start
 import numpy as np
 import pygame
 import os
@@ -250,46 +249,6 @@ def possible_moves_king(square):
 
     return possible_moves
 
-# handle the machanics for promotion
-def promotion(square):
-    del position[square]
-    has_chosen = False
-    while not has_chosen:
-        print("\n", "enter 1 for queen", "\n", "enter 2 for rook", "\n", "enter 3 for bishop", "\n", "enter 4 for knight")
-        choice = input()
-        if square[0] == 7: # This means it's a black pawn
-            if choice == "1":
-                position[square] = Piece("black", "b_queen.png", 15, None, False, False)
-                has_chosen = True
-            elif choice == "2":
-                position[square] = Piece("black", "b_rook.png", 12, None, False, False)
-                has_chosen = True
-            elif choice == "3":
-                position[square] = Piece("black", "b_rook.png", 12, None, False, False)
-                has_chosen = True
-            elif choice == "4":
-                position[square] = Piece("black", "b_knight.png", 13, None, False, False)
-                has_chosen = True
-            else:
-                print("Invalid input, choose again")
-        elif square[0] == 0: # this means the pawn is white
-            if choice == "1":
-                position[square] = Piece("white", "w_queen.png", 5, None, False, False)
-                has_chosen = True
-            elif choice == "2":
-                position[square] = Piece("white", "w_rook.png", 2, None, False, False)
-                has_chosen = True
-            elif choice == "3":
-                position[square] = Piece("white", "w_rook.png", 2, None, False, False)
-                has_chosen = True
-            elif choice == "4":
-                position[square] = Piece("white", "w_knight.png", 3, None, False, False)
-                has_chosen = True
-            else:
-                print("Invalid input, choose again")
-        else:
-            raise Exception("invalid promotion square")
-
 def can_castle(square, side):
     # create a list of all the attacked squares
     attacked = []
@@ -346,20 +305,19 @@ def can_go(square):
             if position[square].colour != self.colour:
                 position[square].can_capture = True
 
-    filtered = filter(lambda square: position[square] == 0 or position[square].colour != self.colour, can_go)
+    filtered = list(filter(lambda square: position[square] == 0 or position[square].colour != self.colour, can_go))
 
             
     return filtered
 
 def move(start_square, finish_square):
     global position
+    # save the previous position just in case the move turns out to be invalid
+    prev_position = position[finish_square]
+
+    
     if finish_square in can_go(start_square):
-        # destroy the class instance (the piece) if it happens to be on the square
-        if position[finish_square] != 0:
-            if position[finish_square].can_capture:
-                del position[finish_square]
-            else:
-                raise Exception("tried to capture uncapturable piece")
+        
         # handle en passent during the move
         if "pawn" in position[start_square].image:
             if finish_square[0] != 0 and finish_square[0] != 7 and start_square[1] != finish_square[1]:
@@ -396,9 +354,6 @@ def move(start_square, finish_square):
                     position[(start_square[0], start_square[1]+1)] = position[(start_square[0], start_square[1]+3)]
                     position[(start_square[0], start_square[1]+3)] = 0
 
-        # save the previous position just in case the move turns out to be invalid
-        prev_position = position
-
         # move the piece
         position[finish_square] = position[start_square]
         position[start_square] = 0
@@ -414,19 +369,22 @@ def move(start_square, finish_square):
                     # for every piece of the opposite colour
                     if king.pos in can_go(position[key].pos):
                         # if the king is under attack by one of these peices now, when it wasn't before, it means that the check was unblocked, hence the move is invalid
-                        position = prev_position
+                        rect_piece[position[finish_square]].x, rect_piece[position[finish_square]].y = squares[start_square].x_cor, squares[start_square].y_cor
+                        position[start_square] = position[finish_square]
+                        position[finish_square] = prev_position
                         print("invalid move")
                         return 
+        
+        # destroy the class instance (the piece) if it happens to be on the square
+        if prev_position != 0:
+            if prev_position.can_capture:
+                del prev_position
+            else:
+                raise Exception("tried to capture uncapturable piece")
 
-
-
-        # handle promotion
-        if position[key] != 0:
-            if "pawn" in position[finish_square].image:
-                if position[finish_square].colour == "white" and finish_square[0] == 0:
-                    promotion(finish_square)
-                elif position[finish_square].colour =="black" and finish_square[0] == 7:
-                    promotion(finish_square)
+        if "pawn" in position[finish_square].image:
+            if finish_square[0] == 0 or finish_square[0] == 7:
+                promotion(finish_square)
 
         # set the board
         set_board()
@@ -509,7 +467,9 @@ WIDTH = 1200
 WHITE = (255, 255, 255)
 BLUE = (0,191,255)
 YELLOW = (255,255,0)
+BLACK = (0, 0, 0)
 
+# define the window that will be displayed
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 
 class Square:
@@ -517,6 +477,118 @@ class Square:
         self.colour = colour
         self.x_cor = x_cor
         self.y_cor = y_cor
+
+# handle the machanics for promotion - this is handled in the actual game because it requires the selection of a piece
+# arguably, this should be handled in the internal game made above, but it was more difficult and didn't work the way I wanted so I couldn't be bothered and did it this way instead
+# this works without issues (to the extent that I tested it) and doesn't break the internal game mechanics 
+def promotion(square):
+    del rect_piece[position[square]]
+    del position[square]
+
+    # keep track on if the player has chosen a piece
+    chosen = False
+
+    # because promotion is handled differently depending on which side is promoting, this will be handled in two different cases
+    if square[0] == 0: # this means the colour is white
+        select_screen = pygame.Rect(900, 100, 200, 200)
+        pygame.draw.rect(WIN, WHITE, select_screen)
+        # display queen
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "w_queen.png")), (100, 100)), (900, 100)) 
+        # representation that can be clicked on
+        queen = pygame.Rect(900, 100, 100, 100)
+
+        # display rook
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "w_rook.png")), (100, 100)), (1000, 100))
+        rook = pygame.Rect(1000, 100, 100, 100)
+
+        # display bishop
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "w_bishop.png")), (100, 100)), (900, 200))
+        bishop = pygame.Rect(900, 200, 100, 100)
+
+        # display knight
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "w_knight.png")), (100, 100)), (1000, 200))
+        knight = pygame.Rect(1000, 200, 100, 100)
+
+        # display changes on screen
+        draw(squares, position)
+
+        while not chosen:
+            for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if queen.collidepoint(event.pos):
+                        position[square] = Piece("white", "w_queen.png", 5, None, False, False)
+                        chosen = True
+                    elif rook.collidepoint(event.pos):
+                        position[square] = Piece("white", "w_rook.png", 2, None, False, False)
+                        chosen = True
+                    elif bishop.collidepoint(event.pos):
+                        position[square] = Piece("white", "w_bishop.png", 4, None, False, False)
+                        chosen = True
+                    elif knight.collidepoint(event.pos):
+                        position[square] = Piece("white", "w_knight.png", 3, None, False, False)
+                        chosen = True
+        
+        # remove the squares that represent the peices and also the select screen
+        del queen
+        del rook
+        del bishop
+        del knight
+        del select_screen
+        # what we now see on screen are only empty sprites that we can, so we redraw everything i.e. we clear the screen and draw over it
+        WIN.fill(BLACK)
+
+    elif square[0] == 7: # this means the colour is white
+        select_screen = pygame.Rect(900, 100, 200, 200)
+        pygame.draw.rect(WIN, WHITE, select_screen)
+        # display queen
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "b_queen.png")), (100, 100)), (900, 100)) 
+        # representation that can be clicked on
+        queen = pygame.Rect(900, 100, 100, 100)
+
+        # display rook
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "b_rook.png")), (100, 100)), (1000, 100))
+        rook = pygame.Rect(1000, 100, 100, 100)
+
+        # display bishop
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "b_bishop.png")), (100, 100)), (900, 200))
+        bishop = pygame.Rect(900, 200, 100, 100)
+
+        # display knight
+        WIN.blit(pygame.transform.scale(pygame.image.load(os.path.join('assets', "b_knight.png")), (100, 100)), (1000, 200))
+        knight = pygame.Rect(1000, 200, 100, 100)
+
+        # display changes on screen
+        draw(squares, position)
+
+        while not chosen:
+            for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if queen.collidepoint(event.pos):
+                        position[square] = Piece("white", "b_queen.png", 15, None, False, False)
+                        chosen = True
+                    elif rook.collidepoint(event.pos):
+                        position[square] = Piece("white", "b_rook.png", 12, None, False, False)
+                        chosen = True
+                    elif bishop.collidepoint(event.pos):
+                        position[square] = Piece("white", "b_bishop.png", 14, None, False, False)
+                        chosen = True
+                    elif knight.collidepoint(event.pos):
+                        position[square] = Piece("white", "b_knight.png", 13, None, False, False)
+                        chosen = True
+        
+        # remove the squares that represent the peices and also the select screen
+        del queen
+        del rook
+        del bishop
+        del knight
+        del select_screen
+        # what we now see on screen are only empty sprites that we can, so we redraw everything i.e. we clear the screen and draw over it
+        WIN.fill(BLACK)
+
+
+    # make sure the piece can move properly i.e it has a functional representation in rect_piece dict
+    rect_piece[position[square]] = pygame.Rect(squares[square].x_cor, squares[square].y_cor, 100, 100)
+    draw(squares, position)
 
 
 # create a dict with squares corresponding to the piece
@@ -572,43 +644,117 @@ def main():
     # keeping track of what piece is selected
     selected = None
 
+    game_chosen = False
+
+    # gamemodes
+    pvp = False
+    play_ai = False
+    ai_vs_ai = False
+    ai_vs_random = False
+
     while running:
-        for event in pygame.event.get():  
-            if event.type == pygame.QUIT:  
-                running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                # clear the board of the squares that a piece can move to 
-                for s in squares:
-                    squares[s].colour = org_colour[s]
+        if not game_chosen:
+            draw(squares, position)
+            pvp_rect = pygame.Rect(850, 200, 300, 100)
+            pygame.draw.rect(WIN, WHITE, pvp_rect)
+            play_ai_rect = pygame.Rect(850, 350, 300, 100)
+            pygame.draw.rect(WIN, WHITE, play_ai_rect)
+            ai_vs_ai_rect = pygame.Rect(850, 500, 300, 100)
+            pygame.draw.rect(WIN, WHITE, ai_vs_ai_rect)
+            ai_vs_random_rect = pygame.Rect(850, 650, 300, 100)
+            pygame.draw.rect(WIN, WHITE, ai_vs_random_rect)
+            font = pygame.font.Font('freesansbold.ttf', 42)
+            text1 = font.render('Play Manual', True, BLACK, WHITE)
+            WIN.blit(text1, (pvp_rect.x+25, pvp_rect.y+25))
+            text2 = font.render('Play AI', True, BLACK, WHITE)
+            WIN.blit(text2, (play_ai_rect.x+70, play_ai_rect.y+25))
+            text3 = font.render('AI vs AI', True, BLACK, WHITE)
+            WIN.blit(text3, (ai_vs_ai_rect.x+70, ai_vs_ai_rect.y+25))
+            text4 = font.render('AI vs Random', True, BLACK, WHITE)
+            WIN.blit(text4, (ai_vs_random_rect.x+5, ai_vs_random_rect.y+25))
+            font_title = pygame.font.Font('freesansbold.ttf', 35)
+            text5 = font_title.render('Choose gamemode', True, WHITE, BLACK)
+            WIN.blit(text5, (840, 100))
+            pygame.display.update()
+            while not game_chosen:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        if pvp_rect.collidepoint(event.pos):
+                            pvp = True
+                            game_chosen = True
+                        elif play_ai_rect.collidepoint(event.pos):
+                            play_ai = True
+                            game_chosen = True
+                        elif ai_vs_ai_rect.collidepoint(event.pos):
+                            ai_vs_ai = True
+                            game_chosen = True
+                        elif ai_vs_random_rect.collidepoint(event.pos):
+                            ai_vs_random = True
+                            game_chosen = True
+            del pvp_rect
+            del play_ai_rect
+            del ai_vs_ai_rect
+            del ai_vs_random_rect
+            del text1
+            del text2
+            del text3
+            del text4
+            del text5
+            WIN.fill(BLACK)
+            draw(squares, position)
 
-                # keep track on if a piece has moved this turn
-                moved = False
 
-                for square in position:
-                    if squares[square].x_cor < event.pos[0] and squares[square].x_cor + 100 > event.pos[0] and squares[square].y_cor < event.pos[1] and squares[square].y_cor + 100 > event.pos[1]:
-                        if not selected is None and square in can_go(selected):
-                            # above basically means that for every square, if player pressed the square and the pice can go to the square then...
-                            rect_piece[position[selected]].x, rect_piece[position[selected]].y = squares[square].x_cor, squares[square].y_cor
-                            move(selected, square)
-                            draw(squares, position)
-                            print(board)
+        if pvp:
+            turn = 1
+            while not white.is_checkmate and not black.is_checkmate:
+                for event in pygame.event.get():  
+                    if event.type == pygame.QUIT:  
+                        pygame.quit()
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        # clear the board of the squares that a piece can move to 
+                        for s in squares:
+                            squares[s].colour = org_colour[s]
 
-                            # reset selected piece
-                            selected = None
+                        # keep track on if a piece has moved this turn
+                        moved = False
 
-                            # change moved to True because a piece has moved on this click
-                            moved = True
-                            break
+                        for square in position:
+                            if squares[square].x_cor < event.pos[0] and squares[square].x_cor + 100 > event.pos[0] and squares[square].y_cor < event.pos[1] and squares[square].y_cor + 100 > event.pos[1]:
+                                if not selected is None and square in can_go(selected):
+                                    if (position[selected].colour == "white" and turn % 2 == 1) or (position[selected].colour == "black" and turn % 2 == 0):
+                                        # above basically means that for every square, if player pressed the square and the piece can go to the square and it's that sides turn then...
+                                        rect_piece[position[selected]].x, rect_piece[position[selected]].y = squares[square].x_cor, squares[square].y_cor
+                                        move(selected, square)
+                                        draw(squares, position)
+                                        print(board)
 
-                if not moved: # of course, if we move a piece, we don't want to show the squares it can move to
-                    # show all squares that the piece can go to
-                    for square in position:
-                        if position[square] != 0:
-                            if rect_piece[position[square]].collidepoint(event.pos):
-                                highlight(square)
-                                selected = square
 
-        draw(squares, position)
+                                        if position[selected] == 0:
+
+                                            # change moved to True because a piece has moved on this click
+                                            moved = True
+
+                                            # change the turn 
+                                            turn += 1
+
+                                        # reset selected piece
+                                        selected = None
+
+                                        break
+
+                        if not moved: # of course, if we move a piece, we don't want to show the squares it can move to
+                            # show all squares that the piece can go to
+                            for square in position:
+                                if position[square] != 0:
+                                    if rect_piece[position[square]].collidepoint(event.pos):
+                                        if (position[square].colour == "white" and turn % 2 == 1) or (position[square].colour == "black" and turn % 2 == 0):
+                                            highlight(square)
+                                            selected = square
+
+                draw(squares, position)
+
 
 # run program
 main()
